@@ -53,7 +53,7 @@ client.once('ready', async () => {
 
 // --- AUTHORIZED ROLES LIST ---
 // You can use the Role Name (e.g., 'Border Staff') or the exact Role ID
-const ALLOWED_ROLES = ['Border Staff', 'Administrator', 'High Command'];
+const ALLOWED_ROLES = ['Australian Border Force', 'Community Management', 'Prime Minister'];
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
