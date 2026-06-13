@@ -3,7 +3,11 @@ const express = require('express');
 
 // --- STATE DATABASE ---
 let bordersOpen = true;
-let auditLogs = [];
+
+// Continuous totals fed directly from Roblox DataStores so they never reset to 0
+let totalApplicantsCount = 0;
+let passedCount = 0;
+let deniedCount = 0;
 
 // --- EXPRESS SERVER (Roblox Connection) ---
 const app = express();
@@ -19,13 +23,13 @@ app.get('/api/status', (req, res) => {
 });
 
 app.post('/api/submit', async (req, res) => {
-    const { username, userId, passed, score } = req.body;
+    // Roblox will send the overall game totals along with individual exam details
+    const { username, userId, passed, score, overallTotal, overallPassed, overallDenied } = req.body;
 
-    auditLogs.push({
-        timestamp: new Date(),
-        passed: passed,
-        username: username
-    });
+    // Sync the bot's memory with Roblox's permanent DataStore values
+    if (overallTotal !== undefined) totalApplicantsCount = overallTotal;
+    if (overallPassed !== undefined) passedCount = overallPassed;
+    if (overallDenied !== undefined) deniedCount = overallDenied;
 
     // IF A PLAYER PASSES, SEND AN AUDIT LOG FOR MANUAL RANKING
     if (passed) {
@@ -56,9 +60,6 @@ app.post('/api/submit', async (req, res) => {
         }
     }
 
-    const twentyEightDaysAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
-    auditLogs = auditLogs.filter(log => log.timestamp > twentyEightDaysAgo);
-
     res.json({ success: true });
 });
 
@@ -67,7 +68,6 @@ app.listen(3000, () => console.log('🚀 API Bridge running on port 3000'));
 // --- DISCORD BOT CONFIG ---
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// FIXED: Changed 'clientReady' to 'ready' so commands register perfectly
 client.once('ready', async () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
 
@@ -118,18 +118,14 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.commandName === 'audit') {
-        const total = auditLogs.length;
-        const accepted = auditLogs.filter(l => l.passed).length;
-        const denied = total - accepted;
-
         const embed = new EmbedBuilder()
             .setTitle('📊 Citizenship Audit Report')
-            .setDescription('Summary of processing metrics over the trailing **28 days**.')
+            .setDescription('Summary of processing metrics pulled straight from live border logs.')
             .setColor(3447003)
             .addFields(
-                { name: 'Total Applicants', value: `${total}`, inline: true },
-                { name: '✅ Passed', value: `${accepted}`, inline: true },
-                { name: '❌ Denied', value: `${denied}`, inline: true }
+                { name: 'Total Applicants', value: `${totalApplicantsCount}`, inline: true },
+                { name: '✅ Passed', value: `${passedCount}`, inline: true },
+                { name: '❌ Denied', value: `${deniedCount}`, inline: true }
             )
             .setTimestamp();
 
