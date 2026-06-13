@@ -1,0 +1,84 @@
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
+const express = require('express');
+
+let bordersOpen = true;
+let auditLogs = [];
+
+const app = express();
+app.use(express.json());
+
+app.get('/api/status', (req, res) => {
+    res.json({ open: bordersOpen });
+});
+
+app.post('/api/submit', (req, res) => {
+    const { username, userId, passed, score } = req.body;
+
+    auditLogs.push({
+        timestamp: new Date(),
+        passed: passed,
+        username: username
+    });
+
+    const twentyEightDaysAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
+    auditLogs = auditLogs.filter(log => log.timestamp > twentyEightDaysAgo);
+
+    res.json({ success: true });
+});
+
+app.listen(3000, () => console.log('🚀 API Bridge running on port 3000'));
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+client.once('ready', async () => {
+    console.log(`🤖 Logged in as ${client.user.tag}`);
+
+    const commands = [
+        new SlashCommandBuilder().setName('openborders').setDescription('Allows the citizenship test to be taken'),
+        new SlashCommandBuilder().setName('closeborders').setDescription('Locks down the test and kicks incoming players'),
+        new SlashCommandBuilder().setName('audit').setDescription('Shows test metrics over the past 28 days')
+    ];
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+        console.log('✅ Commands registered!');
+    } catch (error) {
+        console.error(error);
+    }
+});
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'openborders') {
+        bordersOpen = true;
+        await interaction.reply('🔓 **Borders Open:** Citizenship testing is now active.');
+    }
+
+    if (interaction.commandName === 'closeborders') {
+        bordersOpen = false;
+        await interaction.reply('🔒 **Borders Closed:** Incoming players will now be automatically disconnected.');
+    }
+
+    if (interaction.commandName === 'audit') {
+        const total = auditLogs.length;
+        const accepted = auditLogs.filter(l => l.passed).length;
+        const denied = total - accepted;
+
+        const embed = new EmbedBuilder()
+            .setTitle('📊 Citizenship Audit Report')
+            .setDescription('Summary of processing metrics over the trailing **28 days**.')
+            .setColor(3447003)
+            .addFields(
+                { name: 'Total Applicants', value: `${total}`, inline: true },
+                { name: '✅ Passed', value: `${accepted}`, inline: true },
+                { name: '❌ Denied', value: `${denied}`, inline: true }
+            )
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed] });
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
