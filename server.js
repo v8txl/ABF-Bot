@@ -1,9 +1,11 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const express = require('express');
 
+// --- STATE DATABASE ---
 let bordersOpen = true;
 let auditLogs = [];
 
+// --- EXPRESS SERVER (Roblox Connection) ---
 const app = express();
 app.use(express.json());
 
@@ -28,6 +30,7 @@ app.post('/api/submit', (req, res) => {
 
 app.listen(3000, () => console.log('🚀 API Bridge running on port 3000'));
 
+// --- DISCORD BOT CONFIG ---
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once('ready', async () => {
@@ -48,9 +51,31 @@ client.once('ready', async () => {
     }
 });
 
+// --- AUTHORIZED ROLES LIST ---
+// You can use the Role Name (e.g., 'Border Staff') or the exact Role ID
+const ALLOWED_ROLES = ['Border Staff', 'Administrator', 'High Command'];
+
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
+    // Check if the interaction is happening in a server channel
+    if (!interaction.guild) {
+        return interaction.reply({ content: '❌ Commands can only be used inside a server.', ephemeral: true });
+    }
+
+    // Check if the user has any of the allowed roles
+    const hasRole = interaction.member.roles.cache.some(role => 
+        ALLOWED_ROLES.includes(role.name) || ALLOWED_ROLES.includes(role.id)
+    );
+
+    if (!hasRole) {
+        return interaction.reply({ 
+            content: '❌ **Access Denied:** You do not have the required staff role to control the borders.', 
+            ephemeral: true 
+        });
+    }
+
+    // --- COMMAND LOGIC ---
     if (interaction.commandName === 'openborders') {
         bordersOpen = true;
         await interaction.reply('🔓 **Borders Open:** Citizenship testing is now active.');
