@@ -35,7 +35,7 @@ app.post('/api/submit', async (req, res) => {
                     .setDescription(`A user has finished their citizenship exam. Please review their score and manually update their group rank if necessary.`)
                     .addFields(
                         { name: 'Roblox Username', value: `${username}`, inline: true },
-                        { name: 'Exam Score', value: `**${score || 'N/A'}%**`, inline: true },
+                        { name: 'Exam Score', value: `**${score || 'N/A'}/20**`, inline: true },
                         { name: 'Action', value: `[View Roblox Profile](https://www.roblox.com/users/${userId || 1}/profile)` }
                     )
                     .setTimestamp()
