@@ -1,22 +1,9 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const express = require('express');
-const noblox = require('noblox.js');
 
 // --- STATE DATABASE ---
 let bordersOpen = true;
 let auditLogs = [];
-
-// --- ROBLOX BOT AUTHENTICATION ---
-async function startRobloxBot() {
-    try {
-        // Automatically logs into your group ranking bot account using your cookie
-        await noblox.setCookie(process.env.ROBLOX_COOKIE);
-        console.log("🎟️ Roblox ranking bot logged in successfully!");
-    } catch (err) {
-        console.error("❌ Roblox Login Failed: ", err.message);
-    }
-}
-startRobloxBot();
 
 // --- EXPRESS SERVER (Roblox Connection) ---
 const app = express();
@@ -35,18 +22,32 @@ app.post('/api/submit', async (req, res) => {
         username: username
     });
 
-    // AUTOMATICALLY RANK THE PLAYER IF THEY PASS
-    if (passed && userId) {
+    // IF A PLAYER PASSES, SEND AN AUDIT LOG FOR MANUAL RANKING
+    if (passed) {
         try {
-            // Converts your environment variable IDs into numbers and ranks the user
-            await noblox.setRank(
-                parseInt(process.env.GROUP_ID), 
-                parseInt(userId), 
-                parseInt(process.env.TARGET_RANK_ID)
-            );
-            console.log(`✅ Successfully promoted ${username} to rank ID ${process.env.TARGET_RANK_ID}!`);
+            const channelId = process.env.AUDIT_CHANNEL_ID;
+            const auditChannel = client.channels.cache.get(channelId);
+
+            if (auditChannel) {
+                const auditEmbed = new EmbedBuilder()
+                    .setColor(0xFFA500) // Clean Orange for "Action Required"
+                    .setTitle('📋 Exam Completed - Manual Review Required')
+                    .setDescription(`A user has finished their citizenship exam. Please review their score and manually update their group rank if necessary.`)
+                    .addFields(
+                        { name: 'Roblox Username', value: `${username}`, inline: true },
+                        { name: 'Exam Score', value: `**${score || 'N/A'}%**`, inline: true },
+                        { name: 'Action', value: `[View Roblox Profile](https://www.roblox.com/users/${userId || 1}/profile)` }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Status: Pending Staff Review' });
+
+                await auditChannel.send({ embeds: [auditEmbed] });
+                console.log(`📩 Audit embed sent to Discord for user ${username}.`);
+            } else {
+                console.error("❌ Audit channel could not be found. Check your AUDIT_CHANNEL_ID env variable!");
+            }
         } catch (err) {
-            console.error(`❌ Failed to rank ${username}: `, err.message);
+            console.error(`❌ Failed to send Discord audit for ${username}: `, err.message);
         }
     }
 
@@ -61,7 +62,8 @@ app.listen(3000, () => console.log('🚀 API Bridge running on port 3000'));
 // --- DISCORD BOT CONFIG ---
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-client.once('ready', async () => {
+// Fixed 'ready' to 'clientReady' to resolve the deprecation warning
+client.once('clientReady', async () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
 
     const commands = [
