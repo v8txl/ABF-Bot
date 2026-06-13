@@ -31,7 +31,7 @@ app.post('/api/submit', async (req, res) => {
     if (overallPassed !== undefined) passedCount = overallPassed;
     if (overallDenied !== undefined) deniedCount = overallDenied;
 
-    // IF A PLAYER PASSES, SEND AN AUDIT LOG FOR MANUAL RANKING
+    // Case A: IF A PLAYER PASSES, SEND AN AUDIT LOG FOR MANUAL RANKING
     if (passed) {
         try {
             const channelId = process.env.AUDIT_CHANNEL_ID;
@@ -51,12 +51,40 @@ app.post('/api/submit', async (req, res) => {
                     .setFooter({ text: 'Status: Pending Staff Review' });
 
                 await auditChannel.send({ embeds: [auditEmbed] });
-                console.log(`📩 Audit embed sent to Discord for user ${username}.`);
+                console.log(`📩 Passed audit embed sent to Discord for user ${username}.`);
             } else {
                 console.error("❌ Audit channel could not be found. Check your AUDIT_CHANNEL_ID env variable!");
             }
         } catch (err) {
             console.error(`❌ Failed to send Discord audit for ${username}: `, err.message);
+        }
+    } 
+    // Case B: IF A PLAYER FAILS, SEND A DIFFERENT EMBED TO THE FAILED LOGS CHANNEL
+    else {
+        try {
+            const failedChannelId = process.env.FAILED_CHANNEL_ID;
+            const failedChannel = client.channels.cache.get(failedChannelId);
+
+            if (failedChannel) {
+                const failedEmbed = new EmbedBuilder()
+                    .setColor(0xFF0000) // Bright Red for "Failed"
+                    .setTitle('❌ Exam Failed - Application Denied')
+                    .setDescription(`A user has failed their citizenship exam and was automatically disconnected from the processing server.`)
+                    .addFields(
+                        { name: 'Roblox Username', value: `${username}`, inline: true },
+                        { name: 'Exam Score', value: `**${score || '0'}/20**`, inline: true },
+                        { name: 'Requirement', value: `Requires 18/20`, inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Status: Automatically Denied' });
+
+                await failedChannel.send({ embeds: [failedEmbed] });
+                console.log(`📩 Failed log embed sent to Discord for user ${username}.`);
+            } else {
+                console.error("❌ Failed logs channel could not be found. Check your FAILED_CHANNEL_ID env variable!");
+            }
+        } catch (err) {
+            console.error(`❌ Failed to send Discord fail log for ${username}: `, err.message);
         }
     }
 
