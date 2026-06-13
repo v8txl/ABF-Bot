@@ -9,6 +9,11 @@ let auditLogs = [];
 const app = express();
 app.use(express.json());
 
+// --- UPTIME ROBOT KEEP ALIVE ROUTE ---
+app.all('/', (req, res) => {
+    res.send('Bot is alive!');
+});
+
 app.get('/api/status', (req, res) => {
     res.json({ open: bordersOpen });
 });
@@ -62,8 +67,8 @@ app.listen(3000, () => console.log('🚀 API Bridge running on port 3000'));
 // --- DISCORD BOT CONFIG ---
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Fixed 'ready' to 'clientReady' to resolve the deprecation warning
-client.once('clientReady', async () => {
+// FIXED: Changed 'clientReady' to 'ready' so commands register perfectly
+client.once('ready', async () => {
     console.log(`🤖 Logged in as ${client.user.tag}`);
 
     const commands = [
