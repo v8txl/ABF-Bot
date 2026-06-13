@@ -1,9 +1,22 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const express = require('express');
+const noblox = require('noblox.js');
 
 // --- STATE DATABASE ---
 let bordersOpen = true;
 let auditLogs = [];
+
+// --- ROBLOX BOT AUTHENTICATION ---
+async function startRobloxBot() {
+    try {
+        // Automatically logs into your group ranking bot account using your cookie
+        await noblox.setCookie(process.env.ROBLOX_COOKIE);
+        console.log("🎟️ Roblox ranking bot logged in successfully!");
+    } catch (err) {
+        console.error("❌ Roblox Login Failed: ", err.message);
+    }
+}
+startRobloxBot();
 
 // --- EXPRESS SERVER (Roblox Connection) ---
 const app = express();
@@ -13,7 +26,7 @@ app.get('/api/status', (req, res) => {
     res.json({ open: bordersOpen });
 });
 
-app.post('/api/submit', (req, res) => {
+app.post('/api/submit', async (req, res) => {
     const { username, userId, passed, score } = req.body;
 
     auditLogs.push({
@@ -21,6 +34,21 @@ app.post('/api/submit', (req, res) => {
         passed: passed,
         username: username
     });
+
+    // AUTOMATICALLY RANK THE PLAYER IF THEY PASS
+    if (passed && userId) {
+        try {
+            // Converts your environment variable IDs into numbers and ranks the user
+            await noblox.setRank(
+                parseInt(process.env.GROUP_ID), 
+                parseInt(userId), 
+                parseInt(process.env.TARGET_RANK_ID)
+            );
+            console.log(`✅ Successfully promoted ${username} to rank ID ${process.env.TARGET_RANK_ID}!`);
+        } catch (err) {
+            console.error(`❌ Failed to rank ${username}: `, err.message);
+        }
+    }
 
     const twentyEightDaysAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
     auditLogs = auditLogs.filter(log => log.timestamp > twentyEightDaysAgo);
@@ -52,18 +80,15 @@ client.once('ready', async () => {
 });
 
 // --- AUTHORIZED ROLES LIST ---
-// You can use the Role Name (e.g., 'Border Staff') or the exact Role ID
-const ALLOWED_ROLES = ['Australian Border Force', 'Community Management', 'Prime Minister'];
+const ALLOWED_ROLES = ['Border Staff', 'Administrator', 'High Command'];
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // Check if the interaction is happening in a server channel
     if (!interaction.guild) {
         return interaction.reply({ content: '❌ Commands can only be used inside a server.', ephemeral: true });
     }
 
-    // Check if the user has any of the allowed roles
     const hasRole = interaction.member.roles.cache.some(role => 
         ALLOWED_ROLES.includes(role.name) || ALLOWED_ROLES.includes(role.id)
     );
@@ -75,7 +100,6 @@ client.on('interactionCreate', async interaction => {
         });
     }
 
-    // --- COMMAND LOGIC ---
     if (interaction.commandName === 'openborders') {
         bordersOpen = true;
         await interaction.reply('🔓 **Borders Open:** Citizenship testing is now active.');
